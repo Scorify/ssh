@@ -1,20 +1,23 @@
-package check_template
+package ssh
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
-// Schema is a custom defined struct that will hold the check configuration
 type Schema struct {
-	Target string `json:"target"` // Make sure to use the json tags to define the key in the config
-	Port   int    `json:"port"`
-
-	// Add any additional fields that you want to pass in as config
+	Target         string `json:"target"`
+	Port           int    `json:"port"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	Command        string `json:"command"`
+	ExpectedOutput string `json:"expected_output"`
 }
 
-// Run is the function that will get called to run an instance of a check
 func Run(ctx context.Context, config string) error {
 	// Define a new Schema
 	schema := Schema{}
@@ -25,9 +28,54 @@ func Run(ctx context.Context, config string) error {
 		return err
 	}
 
-	// Custom logic to run the check
+	ssh_config := &ssh.ClientConfig{
+		User: schema.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(schema.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
 
-	fmt.Println("Running check with target:", schema.Target, "and port:", schema.Port)
+	target := fmt.Sprintf("%s:%d", schema.Target, schema.Port)
+	errChan := make(chan error)
 
-	return nil
+	go func() {
+		defer close(errChan)
+		client, err := ssh.Dial("tcp", target, ssh_config)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer client.Close()
+
+		session, err := client.NewSession()
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer session.Close()
+
+		output, err := session.CombinedOutput(schema.Command)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		outputString := strings.TrimSpace(string(output))
+		expectedOutputString := strings.TrimSpace(schema.ExpectedOutput)
+
+		if outputString != expectedOutputString {
+			errChan <- fmt.Errorf("expected output \"%s\" but got \"%s\"", expectedOutputString, outputString)
+			return
+		}
+
+		errChan <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
 }
