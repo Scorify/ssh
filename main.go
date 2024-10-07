@@ -2,10 +2,10 @@ package ssh
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/scorify/schema"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -16,6 +16,37 @@ type Schema struct {
 	Password       string `key:"password"`
 	Command        string `key:"command"`
 	ExpectedOutput string `key:"expected_output"`
+}
+
+func Validate(config string) error {
+	conf := Schema{}
+
+	err := schema.Unmarshal([]byte(config), &conf)
+	if err != nil {
+		return err
+	}
+
+	if conf.Server == "" {
+		return fmt.Errorf("server is required; got %q", conf.Server)
+	}
+
+	if conf.Port <= 0 || conf.Port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535; got %d", conf.Port)
+	}
+
+	if conf.Username == "" {
+		return fmt.Errorf("username is required; got %q", conf.Username)
+	}
+
+	if conf.Password == "" {
+		return fmt.Errorf("password is required; got %q", conf.Password)
+	}
+
+	if conf.Command == "" {
+		return fmt.Errorf("command is required; got %q", conf.Command)
+	}
+
+	return nil
 }
 
 func Run(ctx context.Context, config string) error {
