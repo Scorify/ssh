@@ -50,24 +50,22 @@ func Validate(config string) error {
 }
 
 func Run(ctx context.Context, config string) error {
-	// Define a new Schema
-	schema := Schema{}
+	conf := Schema{}
 
-	// Unmarshal the config to the Schema
-	err := json.Unmarshal([]byte(config), &schema)
+	err := schema.Unmarshal([]byte(config), &conf)
 	if err != nil {
 		return err
 	}
 
 	ssh_config := &ssh.ClientConfig{
-		User: schema.Username,
+		User: conf.Username,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(schema.Password),
+			ssh.Password(conf.Password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	target := fmt.Sprintf("%s:%d", schema.Target, schema.Port)
+	target := fmt.Sprintf("%s:%d", conf.Server, conf.Port)
 	errChan := make(chan error)
 
 	go func() {
@@ -86,14 +84,14 @@ func Run(ctx context.Context, config string) error {
 		}
 		defer session.Close()
 
-		output, err := session.CombinedOutput(schema.Command)
+		output, err := session.CombinedOutput(conf.Command)
 		if err != nil {
 			errChan <- err
 			return
 		}
 
 		outputString := strings.TrimSpace(string(output))
-		expectedOutputString := strings.TrimSpace(schema.ExpectedOutput)
+		expectedOutputString := strings.TrimSpace(conf.ExpectedOutput)
 
 		if outputString != expectedOutputString {
 			errChan <- fmt.Errorf("expected output \"%s\" but got \"%s\"", expectedOutputString, outputString)
