@@ -66,7 +66,7 @@ func Run(ctx context.Context, config string) error {
 	}
 
 	target := fmt.Sprintf("%s:%d", conf.Server, conf.Port)
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 
 	go func() {
 		defer close(errChan)
